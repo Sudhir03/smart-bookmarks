@@ -9,7 +9,10 @@ export default function Home() {
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+
+  const [isAdding, setIsAdding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
@@ -42,7 +45,26 @@ export default function Home() {
           table: "bookmarks",
           filter: `user_id=eq.${user.id}`,
         },
-        fetchBookmarks,
+        (payload) => {
+          setBookmarks((prev) => {
+            switch (payload.eventType) {
+              case "INSERT":
+                if (prev.some((b) => b.id === payload.new.id)) return prev;
+                return [payload.new, ...prev];
+
+              case "UPDATE":
+                return prev.map((b) =>
+                  b.id === payload.new.id ? payload.new : b,
+                );
+
+              case "DELETE":
+                return prev.filter((b) => b.id !== payload.old.id);
+
+              default:
+                return prev;
+            }
+          });
+        },
       )
       .subscribe();
 
@@ -54,6 +76,8 @@ export default function Home() {
   /* ================= DATA ================= */
 
   const fetchBookmarks = async () => {
+    if (!user) return;
+
     const { data } = await supabase
       .from("bookmarks")
       .select("*")
@@ -65,10 +89,7 @@ export default function Home() {
 
   const normalizeAndValidateUrl = (input) => {
     let value = input.trim();
-
-    if (!value.toLowerCase().startsWith("http")) {
-      value = "https://" + value;
-    }
+    if (!value.toLowerCase().startsWith("http")) value = "https://" + value;
 
     try {
       const parsed = new URL(value);
@@ -84,37 +105,48 @@ export default function Home() {
   const addBookmark = async () => {
     setError("");
 
-    if (!title || !url) {
-      setError("All fields are required");
-      return;
-    }
+    if (!title || !url) return setError("All fields are required");
 
     const normalizedUrl = normalizeAndValidateUrl(url);
-    if (!normalizedUrl) {
-      setError("Invalid URL format");
-      return;
+    if (!normalizedUrl) return setError("Invalid URL format");
+
+    setIsAdding(true);
+
+    const { data, error } = await supabase
+      .from("bookmarks")
+      .insert({ title, url: normalizedUrl, user_id: user.id })
+      .select()
+      .single();
+
+    setIsAdding(false);
+
+    if (error) {
+      if (error.code === "23505") {
+        return setError("This bookmark already exists.");
+      }
+      return setError(error.message);
     }
 
-    setLoading(true);
-
-    const { error } = await supabase.from("bookmarks").insert({
-      title,
-      url: normalizedUrl,
-      user_id: user.id,
-    });
-
-    setLoading(false);
-
-    if (error) return setError(error.message);
+    setBookmarks((prev) => [data, ...prev]);
 
     setTitle("");
     setUrl("");
   };
 
   const deleteBookmark = async (id) => {
-    setLoading(true);
-    await supabase.from("bookmarks").delete().eq("id", id);
-    setLoading(false);
+    setDeletingId(id);
+
+    const previous = bookmarks;
+    setBookmarks((prev) => prev.filter((b) => b.id !== id));
+
+    const { error } = await supabase.from("bookmarks").delete().eq("id", id);
+
+    setDeletingId(null);
+
+    if (error) {
+      setBookmarks(previous);
+      setError(error.message);
+    }
   };
 
   const startEdit = (b) => {
@@ -134,21 +166,22 @@ export default function Home() {
     setError("");
 
     const normalizedUrl = normalizeAndValidateUrl(editUrl);
-    if (!editTitle || !normalizedUrl) {
-      setError("Invalid edit data");
-      return;
-    }
+    if (!editTitle || !normalizedUrl) return setError("Invalid edit data");
 
-    setLoading(true);
+    setIsSaving(true);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("bookmarks")
       .update({ title: editTitle, url: normalizedUrl })
-      .eq("id", editingId);
+      .eq("id", editingId)
+      .select()
+      .single();
 
-    setLoading(false);
+    setIsSaving(false);
 
     if (error) return setError(error.message);
+
+    setBookmarks((prev) => prev.map((b) => (b.id === editingId ? data : b)));
 
     cancelEdit();
   };
@@ -353,10 +386,10 @@ export default function Home() {
               />
               <button
                 onClick={addBookmark}
-                disabled={loading}
+                disabled={isAdding}
                 className="bg-linear-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-8 py-3 rounded-xl font-medium transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? "Adding..." : "Add"}
+                {isAdding ? "Adding..." : "Add"}
               </button>
             </div>
             {error && (
@@ -398,14 +431,14 @@ export default function Home() {
                   <div className="flex gap-3">
                     <button
                       onClick={saveEdit}
-                      disabled={loading}
+                      disabled={isSaving}
                       className="flex-1 bg-linear-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-6 py-2.5 rounded-xl font-medium transition-all duration-200 disabled:opacity-50"
                     >
-                      {loading ? "Saving..." : "Save"}
+                      {isSaving ? "Saving..." : "Save"}
                     </button>
                     <button
                       onClick={cancelEdit}
-                      disabled={loading}
+                      disabled={isSaving}
                       className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2.5 rounded-xl font-medium transition-colors duration-200 disabled:opacity-50"
                     >
                       Cancel
@@ -430,17 +463,17 @@ export default function Home() {
                   <div className="flex gap-2 sm:shrink-0">
                     <button
                       onClick={() => startEdit(b)}
-                      disabled={loading}
+                      disabled={isSaving || deletingId === b.id}
                       className="flex-1 sm:flex-none bg-amber-50 hover:bg-amber-100 text-amber-700 px-6 py-2.5 rounded-xl font-medium transition-colors duration-200 border border-amber-200 disabled:opacity-50"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => deleteBookmark(b.id)}
-                      disabled={loading}
+                      disabled={deletingId === b.id}
                       className="flex-1 sm:flex-none bg-red-50 hover:bg-red-100 text-red-700 px-6 py-2.5 rounded-xl font-medium transition-colors duration-200 border border-red-200 disabled:opacity-50"
                     >
-                      {loading ? "..." : "Delete"}
+                      {deletingId === b.id ? "Deleting..." : "Delete"}
                     </button>
                   </div>
                 </div>
