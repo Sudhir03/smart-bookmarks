@@ -1,36 +1,162 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# SmartBookmarks — Real-Time Private Bookmark Manager
 
-## Getting Started
+SmartBookmarks is a full-stack web application that allows users to securely save, manage, and organize their personal bookmarks. The system provides real-time synchronization across multiple tabs and enforces strict per-user data isolation using Supabase Row Level Security (RLS).
 
-First, run the development server:
+---
+
+## 🚀 Features
+
+### Authentication
+
+- Google OAuth login via Supabase
+- Secure session management
+- No email/password handling required
+
+### Bookmark Management
+
+- Add bookmarks with title and URL validation
+- Edit existing bookmarks
+- Delete bookmarks
+- Automatic URL normalization
+
+### Real-Time Updates
+
+- Instant synchronization across browser tabs using Supabase Realtime subscriptions
+
+### Security
+
+- Row Level Security (RLS) ensures:
+  - Users can only access their own bookmarks
+  - Backend-level data protection
+
+---
+
+## 🏗 Tech Stack
+
+**Frontend**
+
+- Next.js (App Router)
+- React
+- Tailwind CSS
+
+**Backend / Services**
+
+- Supabase (PostgreSQL + Auth + Realtime)
+
+**Deployment**
+
+- Vercel
+
+---
+
+## ⚙️ Getting Started
+
+### 1. Clone the repository
+
+```bash
+git clone <your-repo-url>
+cd smart-bookmarks
+```
+
+---
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+---
+
+### 3. Configure environment variables
+
+Create a `.env.local` file:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=your_publishable_default_key
+```
+
+---
+
+### 4. Run development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open:
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+```
+http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 🗄 Database Setup (Supabase)
 
-To learn more about Next.js, take a look at the following resources:
+Create a table:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Table: `bookmarks`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Column     | Type               |
+| ---------- | ------------------ |
+| id         | uuid (primary key) |
+| title      | text               |
+| url        | text               |
+| user_id    | uuid               |
+| created_at | timestamp          |
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Enable Row Level Security
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Run in Supabase SQL editor:
+
+```sql
+alter table bookmarks enable row level security;
+
+create policy "Users can view own bookmarks"
+on bookmarks for select
+using (auth.uid() = user_id);
+
+create policy "Users can insert own bookmarks"
+on bookmarks for insert
+with check (auth.uid() = user_id);
+
+create policy "Users can update own bookmarks"
+on bookmarks for update
+using (auth.uid() = user_id);
+
+create policy "Users can delete own bookmarks"
+on bookmarks for delete
+using (auth.uid() = user_id);
+```
+
+---
+
+## 🌐 Deployment
+
+This project is deployed using Vercel.
+
+### Steps:
+
+1. Push code to GitHub
+2. Import repository into Vercel
+3. Add environment variables
+4. Deploy
+
+---
+
+## 📌 Key Highlights
+
+- Real-time full-stack architecture
+- Secure multi-user data isolation
+- Modern UI with responsive design
+- Production-grade authentication and authorization
+
+---
+
+## 📄 License
+
+This project is for educational and demonstration purposes.
